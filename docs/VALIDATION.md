@@ -19,8 +19,9 @@ This file records observed checks. Planned checks are not presented as passing.
 | Source and documentation structure | reviewed locally | Files created in isolated ArgusScan tree |
 | CMake configure | passed | Debug build generated under WSL2 |
 | Compilation with warnings as errors | passed | GCC 15.2.0 compiled all foundation targets |
-| Unit tests | passed | 1 CTest target; checksum, invalid-input, timing and state checks passed |
-| Address/undefined behavior sanitizers | passed | Same unit target passed with ASan and UBSan enabled |
+| Unit and loopback tests | passed | 1 CTest target; checksums, port parser, timing, pool, open/closed TCP and invalid inputs passed |
+| Address/undefined behavior sanitizers | passed | Expanded CTest target passed with ASan and UBSan enabled |
+| TCP Connect CLI | passed | Loopback ports 1 and 65535 were reported closed in the observed run |
 | Raw socket integration | pending | Raw scanning is not implemented |
 | libpcap capture | pending | Dependency is installed; capture code is not implemented |
 
@@ -46,9 +47,12 @@ ctest --test-dir build --output-on-failure
 ./build/argusscan --help
 ```
 
-The first successful CTest run reported one test target and zero failures. Network
-behavior is still outside the tested scope.
+The current CTest target reported zero failures. Its TCP integration creates a real
+ephemeral loopback listener, observes that port as open, closes it and observes the
+same port as closed. A separate CLI smoke run scanned loopback ports 1 and 65535 and
+reported both closed.
 
 A second build used `-fsanitize=address,undefined` and
 `-fno-omit-frame-pointer`; its CTest run also reported zero failures. This covers
-only the currently implemented foundation modules.
+the implemented core and TCP Connect modules. Filtered-network behavior has not yet
+been reproduced in a controlled firewall test.

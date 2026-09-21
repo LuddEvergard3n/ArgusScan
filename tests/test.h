@@ -15,7 +15,9 @@ extern int argus_test_failures;
     } while (0)
 
 void test_checksum(void);
+void test_connect(void);
 void test_engine(void);
+void test_port_list(void);
+void test_thread_pool(void);
 
 #endif
-

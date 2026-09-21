@@ -5,8 +5,9 @@ goal is to expose packet construction, response correlation, scan semantics,
 service probing and probabilistic operating-system fingerprinting instead of
 delegating the core work to Nmap or another scanner.
 
-> **Status:** foundation milestone. Checksums, port-state types, timing templates,
-> build files and unit tests exist. Network scanning is not implemented yet.
+> **Status:** TCP Connect milestone. The unprivileged IPv4 scanner accepts hostnames,
+> port lists/ranges and timing profiles, and uses a bounded worker pool. Raw scans,
+> service detection and OS fingerprinting are not implemented yet.
 
 Use ArgusScan only against systems you own or have explicit permission to test.
 
@@ -44,6 +45,19 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+## Current usage
+
+```sh
+./build/argusscan \
+  --scan tcp-connect \
+  --ports 22,80,443,8000-8010 \
+  --timing normal \
+  127.0.0.1
+```
+
+TCP Connect completes a normal operating-system handshake. It is therefore easy
+to observe in target logs, but does not require raw-socket privileges.
+
 The foundation currently builds under WSL2 Ubuntu with GCC, and its unit checks
 pass with warnings treated as errors. Exact observed versions and commands are
 recorded in [Validation](docs/VALIDATION.md).
@@ -54,7 +68,7 @@ Raw scans will require either root or a narrowly scoped Linux capability:
 sudo setcap cap_net_raw+ep ./build/argusscan
 ```
 
-TCP Connect will not require raw-socket privileges.
+TCP Connect does not require raw-socket privileges.
 
 ## Documentation
 

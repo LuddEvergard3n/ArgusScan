@@ -22,6 +22,15 @@ Blocking TCP Connect and application-level service probes use a bounded worker
 pool. Raw transmission uses a scheduler, a capture loop and a probe table keyed by
 protocol, addresses, ports and correlation data such as TCP sequence numbers.
 
+## Implemented TCP Connect path
+
+The current CLI resolves one hostname to its first IPv4 address, normalizes a
+comma/range port specification, and allocates results in sorted port order. A fixed
+pool consumes a bounded ring queue. Each worker performs a nonblocking `connect`,
+waits with `poll` against the selected timing profile and records latency using a
+monotonic clock. `ECONNREFUSED` becomes `closed`; successful completion becomes
+`open`; timeout and other network failures currently become `filtered`.
+
 ## Response semantics
 
 | Scan | Observation | Result |
@@ -65,4 +74,3 @@ Linux raw scans require `CAP_NET_RAW` or root. TCP Connect does not. The program
 will refuse a raw scan with an actionable error when privileges are unavailable.
 Privilege reduction after socket initialization will be evaluated before the raw
 milestone is considered complete.
-
