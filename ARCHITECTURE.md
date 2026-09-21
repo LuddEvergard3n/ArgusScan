@@ -22,6 +22,11 @@ Blocking TCP Connect and application-level service probes use a bounded worker
 pool. Raw transmission uses a scheduler, a capture loop and a probe table keyed by
 protocol, addresses, ports and correlation data such as TCP sequence numbers.
 
+The current raw implementation reuses one capture handle and one raw socket but
+processes probes sequentially. The outstanding-probe table and parallel raw
+scheduler in the target architecture are not implemented yet; timing profiles
+currently affect raw timeout, retries and inter-probe delay, not raw parallelism.
+
 ## Implemented TCP Connect path
 
 The current CLI resolves one hostname to its first IPv4 address, normalizes a
@@ -67,6 +72,24 @@ Fingerprinting will retain observations rather than only a guessed label:
 
 Signatures produce explainable weighted scores. A result is probabilistic and may
 be altered by routing, NAT, firewalls, proxies or kernel configuration.
+
+The current implementation extracts evidence from the SYN/ACK and produces broad
+`Linux-like`, `Windows-like` or `BSD/macOS-like` scores. Multi-probe active OS
+signatures and a versioned signature database remain pending.
+
+## Service detection
+
+Service detection reconnects only to TCP ports already classified open and is
+opt-in through `--services`. It listens briefly before sending anything, then uses
+bounded non-authenticating probes for HTTP and Redis where appropriate. SSH and
+MySQL greetings are recognized by content rather than assuming the conventional
+port. Banner storage is capped at 512 bytes and text output escapes control bytes.
+
+## Output
+
+All scan paths are normalized into a report model before formatting. Text, JSON and
+XML share the same state, latency, fingerprint, service and banner fields. JSON and
+XML escape untrusted strings independently.
 
 ## Privilege boundary
 

@@ -5,9 +5,10 @@ goal is to expose packet construction, response correlation, scan semantics,
 service probing and probabilistic operating-system fingerprinting instead of
 delegating the core work to Nmap or another scanner.
 
-> **Status:** TCP Connect milestone. The unprivileged IPv4 scanner accepts hostnames,
-> port lists/ranges and timing profiles, and uses a bounded worker pool. Raw scans,
-> service detection and OS fingerprinting are not implemented yet.
+> **Status:** functional Linux/IPv4 laboratory scanner. TCP Connect, SYN, FIN,
+> NULL, XMAS, ACK, Window and UDP scans are implemented. SYN responses feed an
+> explainable heuristic fingerprint, and optional bounded service probes can inspect
+> open TCP ports. See the declared limitations before interpreting results.
 
 Use ArgusScan only against systems you own or have explicit permission to test.
 
@@ -49,14 +50,24 @@ ctest --test-dir build --output-on-failure
 
 ```sh
 ./build/argusscan \
-  --scan tcp-connect \
+  --scan syn \
   --ports 22,80,443,8000-8010 \
   --timing normal \
+  --services \
+  --output json \
   127.0.0.1
 ```
 
 TCP Connect completes a normal operating-system handshake. It is therefore easy
 to observe in target logs, but does not require raw-socket privileges.
+
+Available scan types are `tcp-connect`, `syn`, `fin`, `null`, `xmas`, `ack`,
+`window` and `udp`. Output can be `text`, `json` or `xml`. Raw scans require root
+or suitable capture/raw capabilities; verify the environment with:
+
+```sh
+./build/argusscan --check-raw
+```
 
 The foundation currently builds under WSL2 Ubuntu with GCC, and its unit checks
 pass with warnings treated as errors. Exact observed versions and commands are
@@ -69,6 +80,11 @@ sudo setcap cap_net_raw+ep ./build/argusscan
 ```
 
 TCP Connect does not require raw-socket privileges.
+
+The executable built on a Windows-mounted WSL path may not retain Linux file
+capabilities. For `setcap`, build or copy it to a Linux filesystem first. The
+validated laboratory command used WSL root rather than assigning a persistent
+capability.
 
 ## Documentation
 

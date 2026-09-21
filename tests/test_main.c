@@ -7,7 +7,10 @@ int main(void)
     test_checksum();
     test_connect();
     test_engine();
+    test_packet();
+    test_capture_frame();
     test_port_list();
+    test_service();
     test_thread_pool();
 
     if (argus_test_failures != 0) {

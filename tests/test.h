@@ -17,7 +17,10 @@ extern int argus_test_failures;
 void test_checksum(void);
 void test_connect(void);
 void test_engine(void);
+void test_packet(void);
+void test_capture_frame(void);
 void test_port_list(void);
+void test_service(void);
 void test_thread_pool(void);
 
 #endif

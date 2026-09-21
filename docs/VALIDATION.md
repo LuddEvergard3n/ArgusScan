@@ -22,8 +22,17 @@ This file records observed checks. Planned checks are not presented as passing.
 | Unit and loopback tests | passed | 1 CTest target; checksums, port parser, timing, pool, open/closed TCP and invalid inputs passed |
 | Address/undefined behavior sanitizers | passed | Expanded CTest target passed with ASan and UBSan enabled |
 | TCP Connect CLI | passed | Loopback ports 1 and 65535 were reported closed in the observed run |
-| Raw socket integration | pending | Raw scanning is not implemented |
-| libpcap capture | pending | Dependency is installed; capture code is not implemented |
+| Packet construction/parsing | passed | TCP and UDP round trips validated IP and pseudo-header checksums; malformed options rejected |
+| libpcap link-layer parsing | passed | Ethernet, VLAN, Linux cooked and raw offsets covered by unit checks |
+| Raw privilege handling | passed | Unprivileged run returned EPERM guidance; WSL root opened the raw socket |
+| SYN | passed in loopback lab | Open listener reported open with fingerprint; adjacent closed port reported closed |
+| FIN / NULL / XMAS | passed in loopback lab | Open listener reported open\|filtered after retries; closed port returned RST |
+| ACK | passed in loopback lab | Both reachable ports reported unfiltered after RST |
+| Window | behavior observed | Linux loopback returned zero-window RST for both; both were classified closed, demonstrating the heuristic limitation |
+| UDP | passed in loopback lab | Replying UDP listener reported open; adjacent closed port reported closed from ICMP |
+| Service detection | passed in loopback lab | SSH greeting on nonstandard port 18080 was recognized by content and safely escaped |
+| JSON output | passed | PowerShell `ConvertFrom-Json` parsed TCP Connect and raw SYN output |
+| XML output | passed | PowerShell loaded output as XML with `argusscan` root and expected port count |
 
 ## Installed Linux packages
 
@@ -53,6 +62,15 @@ same port as closed. A separate CLI smoke run scanned loopback ports 1 and 65535
 reported both closed.
 
 A second build used `-fsanitize=address,undefined` and
-`-fno-omit-frame-pointer`; its CTest run also reported zero failures. This covers
-the implemented core and TCP Connect modules. Filtered-network behavior has not yet
-been reproduced in a controlled firewall test.
+`-fno-omit-frame-pointer`; its expanded CTest run also reported zero failures. This
+covers pure parsers, builders, format helpers, service matching, TCP Connect and
+thread-pool checks. The privileged live smoke is separate from the sanitizer run.
+Filtered-network behavior has not yet been reproduced in a controlled firewall test.
+
+## Privileged loopback smoke
+
+`scripts/raw-loopback-smoke.sh` starts controlled TCP and UDP listeners, verifies
+that both remain alive, and exercises all raw scan types. The observed open TCP
+port was 18080 and the observed closed port was 18081. FIN, NULL and XMAS each took
+about three seconds for the open/filtered timeout path because the normal profile
+performs the initial probe plus two retries.

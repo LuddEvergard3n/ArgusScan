@@ -16,7 +16,14 @@
   modern systems.
 - Service detection uses bounded, non-authenticating probes and cannot identify
   every customized or encrypted service.
+- The current service database covers a deliberately small set of greetings and
+  probes: SSH, HTTP, Redis, MySQL, FTP and SMTP. TLS negotiation is not implemented.
 - Timing profiles reduce or increase traffic rates but cannot guarantee accuracy,
   non-detection or absence of network impact.
+- Raw scans currently process one outstanding probe at a time. `max_parallelism`
+  applies to TCP Connect; the event-driven multi-probe raw scheduler is pending.
+- Target input currently resolves one hostname or IPv4 address. CIDR and address
+  ranges are specified but not yet implemented in the CLI.
+- Current OS scoring uses one SYN/ACK. Multiple active probes and a versioned
+  signature database are required before making narrower OS/version guesses.
 - There is no CVE database, exploit engine, GUI, distributed scanner or Nmap backend.
-

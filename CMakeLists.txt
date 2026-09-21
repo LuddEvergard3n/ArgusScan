@@ -6,25 +6,37 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-add_compile_definitions(_POSIX_C_SOURCE=200809L)
+add_compile_definitions(_POSIX_C_SOURCE=200809L _DEFAULT_SOURCE)
 
 option(ARGUS_BUILD_TESTS "Build ArgusScan unit tests" ON)
 
 find_package(Threads REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PCAP REQUIRED IMPORTED_TARGET libpcap)
 
 add_library(argus_core STATIC
     src/engine/port_list.c
     src/engine/port_state.c
     src/engine/thread_pool.c
     src/engine/timing.c
+    src/fingerprint/os_detect.c
+    src/fingerprint/service_detect.c
     src/net/checksum.c
+    src/net/packet_builder.c
+    src/net/packet_capture.c
+    src/net/packet_parser.c
+    src/net/raw_socket.c
+    src/net/route.c
     src/net/target_resolver.c
+    src/output/report.c
     src/scan/connect_engine.c
+    src/scan/raw_tcp.c
     src/scan/tcp_connect.c
+    src/scan/udp.c
 )
 
 target_include_directories(argus_core PUBLIC src)
-target_link_libraries(argus_core PUBLIC Threads::Threads)
+target_link_libraries(argus_core PUBLIC Threads::Threads PkgConfig::PCAP)
 
 if(MSVC)
     target_compile_options(argus_core PRIVATE /W4 /WX)
@@ -61,8 +73,11 @@ if(ARGUS_BUILD_TESTS)
     add_executable(argus_unit_tests
         tests/test_main.c
         tests/test_checksum.c
+        tests/test_capture_frame.c
         tests/test_connect.c
         tests/test_engine.c
+        tests/test_packet.c
+        tests/test_service.c
         tests/test_port_list.c
         tests/test_thread_pool.c
     )
@@ -82,4 +97,27 @@ if(ARGUS_BUILD_TESTS)
     endif()
 
     add_test(NAME argus_unit_tests COMMAND argus_unit_tests)
+
+    add_executable(argus_test_listener tests/loopback_listener.c)
+    add_executable(argus_test_udp_listener tests/udp_loopback_listener.c)
+    if(MSVC)
+        target_compile_options(argus_test_listener PRIVATE /W4 /WX)
+    else()
+        target_compile_options(argus_test_listener PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+            -Wconversion
+            -Wshadow
+            -Werror
+        )
+        target_compile_options(argus_test_udp_listener PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+            -Wconversion
+            -Wshadow
+            -Werror
+        )
+    endif()
 endif()
