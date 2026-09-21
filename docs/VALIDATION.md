@@ -21,6 +21,7 @@ This file records observed checks. Planned checks are not presented as passing.
 | Compilation with warnings as errors | passed | GCC 15.2.0 compiled all foundation targets |
 | Unit and loopback tests | passed | 1 CTest target; checksums, port parser, timing, pool, open/closed TCP and invalid inputs passed |
 | Address/undefined behavior sanitizers | passed | Expanded CTest target passed with ASan and UBSan enabled |
+| GCC static analyzer | passed after fixes | `-fanalyzer` first exposed an implicit zero-count invariant and non-fatal test setup; both were made explicit, then the full analyzer build passed |
 | TCP Connect CLI | passed | Loopback ports 1 and 65535 were reported closed in the observed run |
 | Packet construction/parsing | passed | TCP and UDP round trips validated IP and pseudo-header checksums; malformed options rejected |
 | libpcap link-layer parsing | passed | Ethernet, VLAN, Linux cooked and raw offsets covered by unit checks |
@@ -35,6 +36,7 @@ This file records observed checks. Planned checks are not presented as passing.
 | XML output | passed | PowerShell loaded output as XML with `argusscan` root and expected port count |
 | Target expansion | passed | Unit checks covered `/30`, last-octet range, hostname and over-limit rejection; CLI scanned `127.0.0.1-2` |
 | Parallel TCP raw deadlines | passed in loopback lab | Two silent open FIN/NULL/XMAS ports completed together at about 3.0 s, not serially at about 6.0 s |
+| Parallel UDP deadlines | passed in loopback lab | Two silent bound UDP ports became open\|filtered together at about 3.0 s; replying and closed ports were resolved immediately |
 
 ## Installed Linux packages
 
@@ -76,3 +78,5 @@ listener, verifies that all remain alive, and exercises all raw scan types. The
 observed open TCP ports were 18080 and 18082; 18081 was closed. FIN, NULL and XMAS
 each took about three seconds total for both open/filtered ports because the normal
 profile schedules them concurrently and performs the initial probe plus two retries.
+UDP ports 18083 and 18084 were deliberately silent and also expired concurrently;
+18080 replied and 18081 generated ICMP port unreachable.

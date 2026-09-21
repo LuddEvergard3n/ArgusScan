@@ -26,12 +26,15 @@ int main(int argc, char **argv)
 {
     struct sockaddr_in address;
     uint16_t port;
+    int silent = 0;
     int handle;
 
-    if (argc != 2 || parse_port(argv[1], &port) != 0) {
-        fprintf(stderr, "usage: %s PORT\n", argv[0]);
+    if ((argc != 2 && argc != 3) || parse_port(argv[1], &port) != 0 ||
+        (argc == 3 && strcmp(argv[2], "--silent") != 0)) {
+        fprintf(stderr, "usage: %s PORT [--silent]\n", argv[0]);
         return 2;
     }
+    silent = argc == 3;
 
     handle = socket(AF_INET, SOCK_DGRAM, 0);
     if (handle < 0) {
@@ -72,7 +75,7 @@ int main(int argc, char **argv)
             (void)close(handle);
             return 1;
         }
-        if (sendto(
+        if (!silent && sendto(
                 handle,
                 response,
                 sizeof(response),
@@ -86,4 +89,3 @@ int main(int argc, char **argv)
         }
     }
 }
-

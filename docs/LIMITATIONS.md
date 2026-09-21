@@ -20,8 +20,9 @@
   probes: SSH, HTTP, Redis, MySQL, FTP and SMTP. TLS negotiation is not implemented.
 - Timing profiles reduce or increase traffic rates but cannot guarantee accuracy,
   non-detection or absence of network impact.
-- TCP raw scans use the bounded event-driven probe table. UDP still processes one
-  outstanding probe at a time and can therefore be especially slow on silent ports.
+- TCP and UDP raw scans use bounded event-driven probe tables. UDP remains slow by
+  protocol design when many services are silent, rate-limit ICMP, or require a
+  protocol-specific request before replying.
 - CIDR and last-octet ranges are capped at 4,096 targets and currently support text
   output only. CIDR expansion includes network and broadcast addresses.
 - Current OS scoring uses one SYN/ACK. Multiple active probes and a versioned

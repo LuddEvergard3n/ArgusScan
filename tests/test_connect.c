@@ -27,9 +27,21 @@ void test_connect(void)
     loopback.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     loopback.sin_port = 0;
 
-    ARGUS_CHECK(bind(listener, (const struct sockaddr *)&loopback, sizeof(loopback)) == 0);
-    ARGUS_CHECK(listen(listener, 1) == 0);
-    ARGUS_CHECK(getsockname(listener, (struct sockaddr *)&bound, &bound_length) == 0);
+    if (bind(listener, (const struct sockaddr *)&loopback, sizeof(loopback)) != 0) {
+        ARGUS_CHECK(0);
+        (void)close(listener);
+        return;
+    }
+    if (listen(listener, 1) != 0) {
+        ARGUS_CHECK(0);
+        (void)close(listener);
+        return;
+    }
+    if (getsockname(listener, (struct sockaddr *)&bound, &bound_length) != 0) {
+        ARGUS_CHECK(0);
+        (void)close(listener);
+        return;
+    }
 
     ARGUS_CHECK(argus_tcp_connect_ipv4(
         loopback.sin_addr,
@@ -51,4 +63,3 @@ void test_connect(void)
 
     ARGUS_CHECK(!argus_tcp_connect_ipv4(loopback.sin_addr, 0U, 1000, &result));
 }
-

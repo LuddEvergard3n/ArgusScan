@@ -9,12 +9,25 @@
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/random.h>
 #include <time.h>
 #include <unistd.h>
 
 #define ARGUS_UDP_PACKET_CAPACITY 128U
+
+typedef struct {
+    uint8_t packet[ARGUS_UDP_PACKET_CAPACITY];
+    size_t packet_length;
+    uint16_t source_port;
+    uint16_t destination_port;
+    int attempts;
+    int64_t started_ms;
+    int64_t deadline_ms;
+    bool active;
+    ArgusUdpResult *result;
+} PendingUdpProbe;
 
 static int64_t monotonic_ms(void)
 {
@@ -34,21 +47,6 @@ static uint32_t random_u32(void)
         return value;
     }
     return (uint32_t)monotonic_ms() ^ (uint32_t)getpid();
-}
-
-static void delay_ms(int milliseconds)
-{
-    struct timespec requested;
-    struct timespec remaining;
-
-    if (milliseconds <= 0) {
-        return;
-    }
-    requested.tv_sec = milliseconds / 1000;
-    requested.tv_nsec = (long)(milliseconds % 1000) * 1000000L;
-    while (nanosleep(&requested, &remaining) != 0 && errno == EINTR) {
-        requested = remaining;
-    }
 }
 
 static bool icmp_matches_udp(
@@ -91,87 +89,24 @@ static bool icmp_matches_udp(
     return false;
 }
 
-static bool wait_for_udp(
-    ArgusPacketCapture *capture,
+static bool prepare_udp_probe(
     struct in_addr source,
     struct in_addr target,
     uint16_t source_port,
     uint16_t destination_port,
-    int timeout_ms,
-    ArgusPortState *state
-)
-{
-    int64_t deadline = monotonic_ms() + timeout_ms;
-
-    while (monotonic_ms() < deadline) {
-        const uint8_t *packet;
-        size_t packet_length;
-        ArgusIPv4View ip;
-        int remaining = (int)(deadline - monotonic_ms());
-        ArgusCaptureStatus capture_status = argus_packet_capture_next_ipv4(
-            capture,
-            remaining,
-            &packet,
-            &packet_length
-        );
-
-        if (capture_status == ARGUS_CAPTURE_TIMEOUT) {
-            return false;
-        }
-        if (capture_status == ARGUS_CAPTURE_ERROR ||
-            !argus_parse_ipv4(packet, packet_length, &ip)) {
-            continue;
-        }
-
-        if (ip.protocol == 17U &&
-            memcmp(ip.source, &target.s_addr, 4U) == 0 &&
-            memcmp(ip.destination, &source.s_addr, 4U) == 0) {
-            ArgusUdpView udp;
-
-            if (argus_parse_udp(&ip, &udp) &&
-                udp.source_port == destination_port && udp.destination_port == source_port) {
-                *state = ARGUS_PORT_OPEN;
-                return true;
-            }
-        } else if (ip.protocol == 1U) {
-            ArgusIcmpView icmp;
-
-            if (argus_parse_icmp(&ip, &icmp) &&
-                icmp_matches_udp(
-                    &icmp,
-                    source,
-                    target,
-                    source_port,
-                    destination_port,
-                    state
-                )) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-static bool scan_one_udp(
-    ArgusRawSocket *raw,
-    ArgusPacketCapture *capture,
-    struct in_addr source,
-    struct in_addr target,
-    uint16_t source_port,
-    uint16_t destination_port,
-    const ArgusTimingConfig *timing,
-    ArgusUdpResult *result
+    ArgusUdpResult *result,
+    PendingUdpProbe *probe
 )
 {
     ArgusUdpPacketSpec spec;
-    uint8_t packet[ARGUS_UDP_PACKET_CAPACITY];
-    size_t packet_length;
-    int attempt;
-    int64_t start = monotonic_ms();
 
     memset(result, 0, sizeof(*result));
     result->port = destination_port;
     result->state = ARGUS_PORT_OPEN_FILTERED;
+    memset(probe, 0, sizeof(*probe));
+    probe->source_port = source_port;
+    probe->destination_port = destination_port;
+    probe->result = result;
 
     memset(&spec, 0, sizeof(spec));
     spec.source = source;
@@ -181,32 +116,87 @@ static bool scan_one_udp(
     spec.ttl = 64U;
     spec.ip_id = (uint16_t)random_u32();
     spec.dont_fragment = true;
-    if (!argus_build_ipv4_udp(&spec, packet, sizeof(packet), &packet_length)) {
+    return argus_build_ipv4_udp(
+        &spec,
+        probe->packet,
+        sizeof(probe->packet),
+        &probe->packet_length
+    );
+}
+
+static void finish_udp_probe(PendingUdpProbe *probe, int64_t now)
+{
+    int64_t elapsed = now - probe->started_ms;
+
+    probe->result->latency_ms = elapsed > INT_MAX ? INT_MAX : (int)elapsed;
+    probe->active = false;
+}
+
+static bool process_udp_packet(
+    const uint8_t *packet,
+    size_t packet_length,
+    PendingUdpProbe *probes,
+    size_t probe_count,
+    struct in_addr source,
+    struct in_addr target,
+    size_t *active_count,
+    size_t *completed_count
+)
+{
+    ArgusIPv4View ip;
+    size_t index;
+
+    if (!argus_parse_ipv4(packet, packet_length, &ip)) {
         return false;
     }
 
-    for (attempt = 0; attempt <= timing->max_retries; ++attempt) {
-        if (!argus_raw_socket_send(raw, target, packet, packet_length)) {
+    if (ip.protocol == 17U &&
+        memcmp(ip.source, &target.s_addr, 4U) == 0 &&
+        memcmp(ip.destination, &source.s_addr, 4U) == 0) {
+        ArgusUdpView udp;
+
+        if (!argus_parse_udp(&ip, &udp)) {
             return false;
         }
-        if (wait_for_udp(
-                capture,
-                source,
-                target,
-                source_port,
-                destination_port,
-                timing->initial_rtt_timeout_ms,
-                &result->state
-            )) {
-            break;
+        for (index = 0U; index < probe_count; ++index) {
+            PendingUdpProbe *probe = &probes[index];
+
+            if (probe->active && udp.source_port == probe->destination_port &&
+                udp.destination_port == probe->source_port) {
+                probe->result->state = ARGUS_PORT_OPEN;
+                finish_udp_probe(probe, monotonic_ms());
+                --(*active_count);
+                ++(*completed_count);
+                return true;
+            }
+        }
+    } else if (ip.protocol == 1U) {
+        ArgusIcmpView icmp;
+
+        if (!argus_parse_icmp(&ip, &icmp)) {
+            return false;
+        }
+        for (index = 0U; index < probe_count; ++index) {
+            PendingUdpProbe *probe = &probes[index];
+            ArgusPortState state;
+
+            if (probe->active && icmp_matches_udp(
+                    &icmp,
+                    source,
+                    target,
+                    probe->source_port,
+                    probe->destination_port,
+                    &state
+                )) {
+                probe->result->state = state;
+                finish_udp_probe(probe, monotonic_ms());
+                --(*active_count);
+                ++(*completed_count);
+                return true;
+            }
         }
     }
-
-    {
-        int64_t elapsed = monotonic_ms() - start;
-        result->latency_ms = elapsed > INT_MAX ? INT_MAX : (int)elapsed;
-    }
-    return true;
+    return false;
 }
 
 bool argus_udp_scan(
@@ -220,8 +210,15 @@ bool argus_udp_scan(
 {
     ArgusRawSocket raw;
     ArgusPacketCapture capture;
+    PendingUdpProbe *probes;
     struct in_addr source;
     uint16_t source_base;
+    size_t concurrency;
+    size_t next_probe = 0U;
+    size_t active_count = 0U;
+    size_t completed_count = 0U;
+    int64_t scan_started;
+    int64_t next_send_at;
     size_t index;
 
     if (target == NULL || ports == NULL || timing == NULL || results == NULL ||
@@ -243,32 +240,173 @@ bool argus_udp_scan(
         return false;
     }
 
-    source_base = (uint16_t)(32768U + (random_u32() % 20000U));
-    for (index = 0U; index < ports->count; ++index) {
-        uint16_t source_port = (uint16_t)(source_base + (uint16_t)(index % 10000U));
+    probes = calloc(ports->count, sizeof(*probes));
+    if (probes == NULL) {
+        (void)snprintf(error, error_capacity, "could not allocate UDP probe table");
+        argus_raw_socket_close(&raw);
+        argus_packet_capture_close(&capture);
+        return false;
+    }
 
-        if (!scan_one_udp(
-                &raw,
-                &capture,
+    source_base = (uint16_t)(20000U + (random_u32() % 10000U));
+    for (index = 0U; index < ports->count; ++index) {
+        uint16_t source_port = (uint16_t)(source_base + (uint16_t)(index % 28232U));
+
+        if (!prepare_udp_probe(
                 source,
                 target->address,
                 source_port,
                 ports->ports[index],
-                timing,
-                &results[index]
+                &results[index],
+                &probes[index]
             )) {
-            (void)snprintf(error, error_capacity, "UDP probe failed near port %u", ports->ports[index]);
+            (void)snprintf(error, error_capacity, "could not prepare UDP port %u", ports->ports[index]);
+            free(probes);
             argus_raw_socket_close(&raw);
             argus_packet_capture_close(&capture);
             return false;
         }
-        if (index + 1U < ports->count) {
-            delay_ms(timing->scan_delay_ms);
+    }
+
+    concurrency = (size_t)timing->max_parallelism;
+    if (concurrency > (size_t)timing->max_outstanding_probes) {
+        concurrency = (size_t)timing->max_outstanding_probes;
+    }
+    if (concurrency > ports->count) {
+        concurrency = ports->count;
+    }
+    if (concurrency > 28232U) {
+        concurrency = 28232U;
+    }
+
+    scan_started = monotonic_ms();
+    next_send_at = scan_started;
+    while (completed_count < ports->count) {
+        int64_t now = monotonic_ms();
+        int64_t wake_at = now + timing->initial_rtt_timeout_ms;
+        int wait_ms;
+        const uint8_t *packet;
+        size_t packet_length;
+        ArgusCaptureStatus capture_status;
+
+        if (timing->host_timeout_ms > 0 &&
+            now - scan_started >= timing->host_timeout_ms) {
+            for (index = 0U; index < ports->count; ++index) {
+                if (probes[index].active) {
+                    finish_udp_probe(&probes[index], now);
+                } else if (probes[index].started_ms == 0) {
+                    results[index].latency_ms = (int)(now - scan_started);
+                }
+            }
+            completed_count = ports->count;
+            break;
+        }
+
+        while (next_probe < ports->count && active_count < concurrency &&
+               now >= next_send_at) {
+            PendingUdpProbe *probe = &probes[next_probe];
+
+            if (!argus_raw_socket_send(
+                    &raw,
+                    target->address,
+                    probe->packet,
+                    probe->packet_length
+                )) {
+                (void)snprintf(error, error_capacity, "send failed near UDP port %u", probe->destination_port);
+                free(probes);
+                argus_raw_socket_close(&raw);
+                argus_packet_capture_close(&capture);
+                return false;
+            }
+            probe->attempts = 1;
+            probe->started_ms = now;
+            probe->deadline_ms = now + timing->initial_rtt_timeout_ms;
+            probe->active = true;
+            ++active_count;
+            ++next_probe;
+            next_send_at = now + timing->scan_delay_ms;
+            if (timing->scan_delay_ms > 0) {
+                break;
+            }
+        }
+
+        for (index = 0U; index < next_probe; ++index) {
+            if (probes[index].active && probes[index].deadline_ms < wake_at) {
+                wake_at = probes[index].deadline_ms;
+            }
+        }
+        if (next_probe < ports->count && active_count < concurrency && next_send_at < wake_at) {
+            wake_at = next_send_at;
+        }
+
+        now = monotonic_ms();
+        wait_ms = wake_at <= now ? 0 : (int)(wake_at - now);
+        if (wait_ms > 0 && active_count > 0U) {
+            capture_status = argus_packet_capture_next_ipv4(
+                &capture,
+                wait_ms,
+                &packet,
+                &packet_length
+            );
+            if (capture_status == ARGUS_CAPTURE_ERROR) {
+                (void)snprintf(error, error_capacity, "capture failed while UDP probes were pending");
+                free(probes);
+                argus_raw_socket_close(&raw);
+                argus_packet_capture_close(&capture);
+                return false;
+            }
+            if (capture_status == ARGUS_CAPTURE_PACKET) {
+                (void)process_udp_packet(
+                    packet,
+                    packet_length,
+                    probes,
+                    next_probe,
+                    source,
+                    target->address,
+                    &active_count,
+                    &completed_count
+                );
+            }
+        } else if (wait_ms > 0) {
+            struct timespec delay;
+
+            delay.tv_sec = wait_ms / 1000;
+            delay.tv_nsec = (long)(wait_ms % 1000) * 1000000L;
+            (void)nanosleep(&delay, NULL);
+        }
+
+        now = monotonic_ms();
+        for (index = 0U; index < next_probe; ++index) {
+            PendingUdpProbe *probe = &probes[index];
+
+            if (!probe->active || probe->deadline_ms > now) {
+                continue;
+            }
+            if (probe->attempts <= timing->max_retries) {
+                if (!argus_raw_socket_send(
+                        &raw,
+                        target->address,
+                        probe->packet,
+                        probe->packet_length
+                    )) {
+                    (void)snprintf(error, error_capacity, "retry failed near UDP port %u", probe->destination_port);
+                    free(probes);
+                    argus_raw_socket_close(&raw);
+                    argus_packet_capture_close(&capture);
+                    return false;
+                }
+                ++probe->attempts;
+                probe->deadline_ms = now + timing->initial_rtt_timeout_ms;
+            } else {
+                finish_udp_probe(probe, now);
+                --active_count;
+                ++completed_count;
+            }
         }
     }
 
+    free(probes);
     argus_raw_socket_close(&raw);
     argus_packet_capture_close(&capture);
     return true;
 }
-

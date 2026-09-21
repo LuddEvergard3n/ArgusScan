@@ -94,6 +94,11 @@ bool argus_port_list_parse(const char *text, ArgusPortList *list)
         }
     }
 
+    if (count == 0U) {
+        free(selected);
+        return false;
+    }
+
     list->ports = malloc(count * sizeof(*list->ports));
     if (list->ports == NULL) {
         free(selected);
@@ -122,4 +127,3 @@ void argus_port_list_destroy(ArgusPortList *list)
     list->ports = NULL;
     list->count = 0U;
 }
-

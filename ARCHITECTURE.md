@@ -27,7 +27,7 @@ outstanding-probe table tracks packet bytes, source/destination ports, TCP seque
 attempt count and monotonic deadline. Responses are parsed once and correlated to
 active entries; expired entries are retried or finalized. Timing profiles cap both
 parallel and outstanding probes, apply inter-probe delay and enforce host timeout.
-UDP still uses the earlier sequential raw loop.
+TCP and UDP use protocol-specific tables with the same scheduling model.
 
 ## Target expansion
 
