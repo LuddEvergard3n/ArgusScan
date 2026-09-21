@@ -12,7 +12,7 @@ delegating the core work to Nmap or another scanner.
 
 Use ArgusScan only against systems you own or have explicit permission to test.
 
-## Planned scan types
+## Implemented scan types
 
 - TCP Connect
 - TCP SYN (half-open)
@@ -32,7 +32,7 @@ Windows 11 with WSL2 Ubuntu. Portable core modules are kept independent of raw
 socket and packet-capture code. Windows-native raw scanning and IPv6 are not part
 of the first release.
 
-The planned capture backend is libpcap. Packet construction, checksums, response
+The capture backend is libpcap. Packet construction, checksums, response
 correlation, state inference, service probes and fingerprint scoring remain
 ArgusScan code.
 
@@ -73,7 +73,7 @@ The foundation currently builds under WSL2 Ubuntu with GCC, and its unit checks
 pass with warnings treated as errors. Exact observed versions and commands are
 recorded in [Validation](docs/VALIDATION.md).
 
-Raw scans will require either root or a narrowly scoped Linux capability:
+Raw scans require either root or a narrowly scoped Linux capability:
 
 ```sh
 sudo setcap cap_net_raw+ep ./build/argusscan

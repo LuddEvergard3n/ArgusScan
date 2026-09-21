@@ -6,7 +6,7 @@ ArgusScan is small enough to explain from packet bytes to final JSON. It uses
 bounded queues, bounded input, explicit deadlines and a fixed worker pool. Raw
 packet transmission is event-driven; it is not implemented as one thread per port.
 
-## Planned data flow
+## Data flow
 
 ```text
 target parser -> scheduler/rate limiter -> packet sender
@@ -44,7 +44,9 @@ comma/range port specification, and allocates results in sorted port order. A fi
 pool consumes a bounded ring queue. Each worker performs a nonblocking `connect`,
 waits with `poll` against the selected timing profile and records latency using a
 monotonic clock. `ECONNREFUSED` becomes `closed`; successful completion becomes
-`open`; timeout and other network failures currently become `filtered`.
+`open`; timeout and other network failures become `filtered`. A host-wide monotonic
+deadline is shared by queued and active jobs, and each `poll` is capped by the time
+remaining before that deadline.
 
 ## Response semantics
 

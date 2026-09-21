@@ -37,6 +37,8 @@ This file records observed checks. Planned checks are not presented as passing.
 | Target expansion | passed | Unit checks covered `/30`, last-octet range, hostname and over-limit rejection; CLI scanned `127.0.0.1-2` |
 | Parallel TCP raw deadlines | passed in loopback lab | Two silent open FIN/NULL/XMAS ports completed together at about 3.0 s, not serially at about 6.0 s |
 | Parallel UDP deadlines | passed in loopback lab | Two silent bound UDP ports became open\|filtered together at about 3.0 s; replying and closed ports were resolved immediately |
+| Filtered-state firewall lab | passed in isolated namespace | nftables drop rules produced SYN filtered, UDP open\|filtered and TCP Connect filtered without changing the Windows host firewall |
+| TCP Connect host deadline | passed | A focused test delayed the second queued job beyond a 50 ms host deadline and observed ETIMEDOUT without starting a late connection |
 
 ## Installed Linux packages
 
@@ -44,7 +46,7 @@ The development environment was prepared with:
 
 ```sh
 sudo apt update
-sudo apt install build-essential cmake pkg-config libpcap-dev
+sudo apt install build-essential cmake pkg-config libpcap-dev nftables
 ```
 
 The packages were installed inside the WSL Ubuntu distribution, not on the Windows
@@ -69,7 +71,6 @@ A second build used `-fsanitize=address,undefined` and
 `-fno-omit-frame-pointer`; its expanded CTest run also reported zero failures. This
 covers pure parsers, builders, format helpers, service matching, TCP Connect and
 thread-pool checks. The privileged live smoke is separate from the sanitizer run.
-Filtered-network behavior has not yet been reproduced in a controlled firewall test.
 
 ## Privileged loopback smoke
 
@@ -80,3 +81,12 @@ each took about three seconds total for both open/filtered ports because the nor
 profile schedules them concurrently and performs the initial probe plus two retries.
 UDP ports 18083 and 18084 were deliberately silent and also expired concurrently;
 18080 replied and 18081 generated ICMP port unreachable.
+
+## Isolated firewall smoke
+
+`scripts/firewall-filter-smoke.sh` creates an ephemeral Linux network namespace,
+brings up only its loopback interface and installs nftables drop rules inside that
+namespace. The observed run classified dropped TCP port 18090 as `filtered` for
+both SYN and TCP Connect, and silent UDP port 18091 as `open|filtered`. Exiting the
+namespace discards the rules; the Windows firewall and the WSL root namespace are
+not modified.

@@ -1,8 +1,13 @@
 #include "test.h"
 
+#include "engine/port_list.h"
+#include "engine/timing.h"
+#include "net/target_resolver.h"
+#include "scan/connect_engine.h"
 #include "scan/tcp_connect.h"
 
 #include <arpa/inet.h>
+#include <errno.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -62,4 +67,21 @@ void test_connect(void)
     ARGUS_CHECK(result.state == ARGUS_PORT_CLOSED);
 
     ARGUS_CHECK(!argus_tcp_connect_ipv4(loopback.sin_addr, 0U, 1000, &result));
+
+    {
+        uint16_t port_values[] = {ntohs(bound.sin_port), ntohs(bound.sin_port)};
+        ArgusPortList ports = {port_values, 2U};
+        ArgusIPv4Target target;
+        ArgusTimingConfig timing = {1000, 1, 1000, 0, 100, 1, 1, 50, 1.0};
+        ArgusConnectResult deadline_results[2];
+
+        memset(&target, 0, sizeof(target));
+        target.address = loopback.sin_addr;
+        memset(deadline_results, 0, sizeof(deadline_results));
+
+        ARGUS_CHECK(argus_tcp_connect_scan(&target, &ports, &timing, deadline_results));
+        ARGUS_CHECK(deadline_results[1].port == ntohs(bound.sin_port));
+        ARGUS_CHECK(deadline_results[1].state == ARGUS_PORT_FILTERED);
+        ARGUS_CHECK(deadline_results[1].system_error == ETIMEDOUT);
+    }
 }
