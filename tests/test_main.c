@@ -12,6 +12,7 @@ int main(void)
     test_port_list();
     test_service();
     test_thread_pool();
+    test_target_parser();
 
     if (argus_test_failures != 0) {
         fprintf(stderr, "%d test check(s) failed\n", argus_test_failures);

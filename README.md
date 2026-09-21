@@ -86,6 +86,11 @@ capabilities. For `setcap`, build or copy it to a Linux filesystem first. The
 validated laboratory command used WSL root rather than assigning a persistent
 capability.
 
+Targets can be a hostname, one IPv4 address, a CIDR such as `192.168.1.0/24`,
+or a last-octet range such as `10.0.0.1-254`. Expansion is capped at 4,096
+addresses. Multi-target scans currently use text output; JSON and XML are single-
+target formats until a collection schema is finalized.
+
 ## Documentation
 
 - [Architecture](ARCHITECTURE.md)

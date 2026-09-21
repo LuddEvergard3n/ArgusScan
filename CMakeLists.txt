@@ -18,6 +18,7 @@ add_library(argus_core STATIC
     src/engine/port_list.c
     src/engine/port_state.c
     src/engine/thread_pool.c
+    src/engine/target_parser.c
     src/engine/timing.c
     src/fingerprint/os_detect.c
     src/fingerprint/service_detect.c
@@ -80,6 +81,7 @@ if(ARGUS_BUILD_TESTS)
         tests/test_service.c
         tests/test_port_list.c
         tests/test_thread_pool.c
+        tests/test_target_parser.c
     )
     target_link_libraries(argus_unit_tests PRIVATE argus_core)
 

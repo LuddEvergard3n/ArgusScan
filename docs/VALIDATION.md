@@ -33,6 +33,8 @@ This file records observed checks. Planned checks are not presented as passing.
 | Service detection | passed in loopback lab | SSH greeting on nonstandard port 18080 was recognized by content and safely escaped |
 | JSON output | passed | PowerShell `ConvertFrom-Json` parsed TCP Connect and raw SYN output |
 | XML output | passed | PowerShell loaded output as XML with `argusscan` root and expected port count |
+| Target expansion | passed | Unit checks covered `/30`, last-octet range, hostname and over-limit rejection; CLI scanned `127.0.0.1-2` |
+| Parallel TCP raw deadlines | passed in loopback lab | Two silent open FIN/NULL/XMAS ports completed together at about 3.0 s, not serially at about 6.0 s |
 
 ## Installed Linux packages
 
@@ -69,8 +71,8 @@ Filtered-network behavior has not yet been reproduced in a controlled firewall t
 
 ## Privileged loopback smoke
 
-`scripts/raw-loopback-smoke.sh` starts controlled TCP and UDP listeners, verifies
-that both remain alive, and exercises all raw scan types. The observed open TCP
-port was 18080 and the observed closed port was 18081. FIN, NULL and XMAS each took
-about three seconds for the open/filtered timeout path because the normal profile
-performs the initial probe plus two retries.
+`scripts/raw-loopback-smoke.sh` starts two controlled TCP listeners and one UDP
+listener, verifies that all remain alive, and exercises all raw scan types. The
+observed open TCP ports were 18080 and 18082; 18081 was closed. FIN, NULL and XMAS
+each took about three seconds total for both open/filtered ports because the normal
+profile schedules them concurrently and performs the initial probe plus two retries.

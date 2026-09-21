@@ -22,5 +22,6 @@ void test_capture_frame(void);
 void test_port_list(void);
 void test_service(void);
 void test_thread_pool(void);
+void test_target_parser(void);
 
 #endif

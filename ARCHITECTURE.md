@@ -22,10 +22,20 @@ Blocking TCP Connect and application-level service probes use a bounded worker
 pool. Raw transmission uses a scheduler, a capture loop and a probe table keyed by
 protocol, addresses, ports and correlation data such as TCP sequence numbers.
 
-The current raw implementation reuses one capture handle and one raw socket but
-processes probes sequentially. The outstanding-probe table and parallel raw
-scheduler in the target architecture are not implemented yet; timing profiles
-currently affect raw timeout, retries and inter-probe delay, not raw parallelism.
+The TCP raw implementation reuses one capture handle and one raw socket. A bounded
+outstanding-probe table tracks packet bytes, source/destination ports, TCP sequence,
+attempt count and monotonic deadline. Responses are parsed once and correlated to
+active entries; expired entries are retried or finalized. Timing profiles cap both
+parallel and outstanding probes, apply inter-probe delay and enforce host timeout.
+UDP still uses the earlier sequential raw loop.
+
+## Target expansion
+
+The parser accepts one hostname/IPv4 address, IPv4 CIDR, or a range whose final
+octet is abbreviated after `-`. Expansion is bounded to 4,096 targets before any
+scan begins. CIDR expansion includes every address in the block, including network
+and broadcast addresses; callers remain responsible for selecting an appropriate
+authorized range.
 
 ## Implemented TCP Connect path
 

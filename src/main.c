@@ -1,4 +1,5 @@
 #include "engine/port_list.h"
+#include "engine/target_parser.h"
 #include "engine/timing.h"
 #include "fingerprint/service_detect.h"
 #include "net/raw_socket.h"
@@ -29,6 +30,7 @@ static void print_help(const char *program)
         "Examples:\n"
         "  %s --scan tcp-connect --ports 22,80,443 --timing normal 127.0.0.1\n"
         "  %s --scan tcp-connect --ports 1-1024 localhost\n"
+        "  %s --scan tcp-connect --ports 80 192.168.1.0/24\n"
         "\n"
         "Timing profiles:\n"
         "  paranoid, sneaky, polite, normal, aggressive, insane\n"
@@ -40,6 +42,7 @@ static void print_help(const char *program)
         "\n"
         "Use only on systems you own or are explicitly authorized to test.\n",
         ARGUS_VERSION,
+        program,
         program,
         program,
         program,
@@ -372,6 +375,12 @@ int main(int argc, char **argv)
     ArgusTimingTemplate timing = ARGUS_TIMING_NORMAL;
     ArgusOutputFormat output_format = ARGUS_OUTPUT_TEXT;
     bool detect_services = false;
+    ArgusRawTcpScanType raw_type = ARGUS_SCAN_SYN;
+    bool is_raw_tcp = false;
+    ArgusTargetList targets;
+    char target_error[160];
+    size_t target_index;
+    int final_status = 0;
     int index;
 
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
@@ -421,26 +430,54 @@ int main(int argc, char **argv)
         fprintf(stderr, "try '%s --help'\n", argv[0]);
         return 2;
     }
-    if (strcmp(scan_type, "tcp-connect") == 0) {
-        return run_connect_scan(
+    if (strcmp(scan_type, "tcp-connect") != 0 && strcmp(scan_type, "udp") != 0) {
+        is_raw_tcp = argus_raw_tcp_scan_parse(scan_type, &raw_type);
+        if (!is_raw_tcp) {
+            fprintf(stderr, "error: scan type '%s' is not implemented yet\n", scan_type);
+            return 2;
+        }
+    }
+
+    if (!argus_target_list_parse(
             target_name,
-            port_text,
-            timing,
-            detect_services,
-            output_format
-        );
+            &targets,
+            target_error,
+            sizeof(target_error)
+        )) {
+        fprintf(stderr, "error: %s\n", target_error[0] == '\0' ? "invalid target" : target_error);
+        return 2;
     }
-    if (strcmp(scan_type, "udp") == 0) {
-        return run_udp_scan(argv[0], target_name, port_text, timing, output_format);
+    if (targets.count > 1U && output_format != ARGUS_OUTPUT_TEXT) {
+        fprintf(stderr, "error: multi-target scans currently support text output only\n");
+        argus_target_list_destroy(&targets);
+        return 2;
     }
 
-    {
-        ArgusRawTcpScanType raw_type;
+    for (target_index = 0U; target_index < targets.count; ++target_index) {
+        const char *current_target = targets.count == 1U
+            ? target_name
+            : targets.targets[target_index].numeric;
 
-        if (argus_raw_tcp_scan_parse(scan_type, &raw_type)) {
-            return run_raw_scan(
+        if (strcmp(scan_type, "tcp-connect") == 0) {
+            final_status = run_connect_scan(
+                current_target,
+                port_text,
+                timing,
+                detect_services,
+                output_format
+            );
+        } else if (strcmp(scan_type, "udp") == 0) {
+            final_status = run_udp_scan(
                 argv[0],
-                target_name,
+                current_target,
+                port_text,
+                timing,
+                output_format
+            );
+        } else {
+            final_status = run_raw_scan(
+                argv[0],
+                current_target,
                 port_text,
                 timing,
                 raw_type,
@@ -448,8 +485,11 @@ int main(int argc, char **argv)
                 output_format
             );
         }
+        if (final_status != 0) {
+            break;
+        }
     }
 
-    fprintf(stderr, "error: scan type '%s' is not implemented yet\n", scan_type);
-    return 2;
+    argus_target_list_destroy(&targets);
+    return final_status;
 }
