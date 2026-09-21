@@ -111,7 +111,12 @@ static void output_text(const ArgusScanReport *report)
         );
         if (port->has_fingerprint) {
             ArgusOsGuess guess = argus_os_guess(&port->fingerprint);
-            printf("  OS guess: %s (confidence %.2f)\n", guess.name, guess.confidence);
+            printf(
+                "  OS guess: %s (confidence %.2f, signature db %s)\n",
+                guess.name,
+                guess.confidence,
+                guess.signature_db_version
+            );
             printf("  Evidence: %s\n", guess.evidence);
         }
         if (port->has_service) {
@@ -153,7 +158,9 @@ static void output_json(const ArgusScanReport *report)
         ArgusOsGuess guess = argus_os_guess(fingerprint);
         fputs("  \"os_guess\": {\"name\": ", stdout);
         print_json_string(guess.name);
-        printf(", \"confidence\": %.2f, \"evidence\": [", guess.confidence);
+        printf(", \"confidence\": %.2f, \"signature_db_version\": ", guess.confidence);
+        print_json_string(guess.signature_db_version);
+        fputs(", \"evidence\": [", stdout);
         print_json_string(guess.evidence);
         fputs("]},\n", stdout);
     }
@@ -205,7 +212,9 @@ static void output_xml(const ArgusScanReport *report)
         ArgusOsGuess guess = argus_os_guess(fingerprint);
         fputs("  <os-guess name=\"", stdout);
         print_xml_text(guess.name);
-        printf("\" confidence=\"%.2f\"><evidence>", guess.confidence);
+        printf("\" confidence=\"%.2f\" signature-db-version=\"", guess.confidence);
+        print_xml_text(guess.signature_db_version);
+        fputs("\"><evidence>", stdout);
         print_xml_text(guess.evidence);
         fputs("</evidence></os-guess>\n", stdout);
     }
@@ -268,4 +277,3 @@ void argus_output_report(const ArgusScanReport *report, ArgusOutputFormat format
         output_text(report);
     }
 }
-

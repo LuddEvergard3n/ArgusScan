@@ -77,6 +77,7 @@ if(ARGUS_BUILD_TESTS)
         tests/test_capture_frame.c
         tests/test_connect.c
         tests/test_engine.c
+        tests/test_os_detect.c
         tests/test_packet.c
         tests/test_service.c
         tests/test_port_list.c

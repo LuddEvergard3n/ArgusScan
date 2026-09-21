@@ -85,9 +85,12 @@ Fingerprinting will retain observations rather than only a guessed label:
 Signatures produce explainable weighted scores. A result is probabilistic and may
 be altered by routing, NAT, firewalls, proxies or kernel configuration.
 
-The current implementation extracts evidence from the SYN/ACK and produces broad
-`Linux-like`, `Windows-like` or `BSD/macOS-like` scores. Multi-probe active OS
-signatures and a versioned signature database remain pending.
+The current implementation extracts evidence from the SYN/ACK and scores broad
+`Linux-like`, `Windows-like` or `BSD/macOS-like` signatures from a compiled,
+versioned table. The table compares TTL, window, DF, feature presence and exact TCP
+option order. The signature-table version is emitted with text, JSON and XML.
+Multi-probe active OS signatures remain pending, so confidence is capped and no
+narrow kernel or OS version is claimed.
 
 ## Service detection
 

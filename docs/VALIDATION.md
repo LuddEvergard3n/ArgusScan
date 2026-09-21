@@ -39,6 +39,7 @@ This file records observed checks. Planned checks are not presented as passing.
 | Parallel UDP deadlines | passed in loopback lab | Two silent bound UDP ports became open\|filtered together at about 3.0 s; replying and closed ports were resolved immediately |
 | Filtered-state firewall lab | passed in isolated namespace | nftables drop rules produced SYN filtered, UDP open\|filtered and TCP Connect filtered without changing the Windows host firewall |
 | TCP Connect host deadline | passed | A focused test delayed the second queued job beyond a 50 ms host deadline and observed ETIMEDOUT without starting a late connection |
+| Versioned OS signature scoring | passed | Synthetic Linux-like and Windows-like fingerprints select their expected signatures; live SYN/ACK evidence reports database version 2026.09 |
 
 ## Installed Linux packages
 
@@ -90,3 +91,11 @@ namespace. The observed run classified dropped TCP port 18090 as `filtered` for
 both SYN and TCP Connect, and silent UDP port 18091 as `open|filtered`. Exiting the
 namespace discards the rules; the Windows firewall and the WSL root namespace are
 not modified.
+
+## Fingerprint scope
+
+The loopback SYN/ACK matched the broad Linux-like signature with confidence 0.75.
+The emitted evidence included the observed and estimated TTL, window, DF, TCP
+feature flags, option count and signature database version `2026.09`. This is a
+controlled consistency check, not evidence that the current single-probe model can
+reliably identify a remote OS or kernel version.

@@ -7,8 +7,9 @@ delegating the core work to Nmap or another scanner.
 
 > **Status:** functional Linux/IPv4 laboratory scanner. TCP Connect, SYN, FIN,
 > NULL, XMAS, ACK, Window and UDP scans are implemented. SYN responses feed an
-> explainable heuristic fingerprint, and optional bounded service probes can inspect
-> open TCP ports. See the declared limitations before interpreting results.
+> explainable heuristic fingerprint scored against a versioned signature table,
+> and optional bounded service probes can inspect open TCP ports. See the declared
+> limitations before interpreting results.
 
 Use ArgusScan only against systems you own or have explicit permission to test.
 

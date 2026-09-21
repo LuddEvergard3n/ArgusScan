@@ -7,6 +7,7 @@ int main(void)
     test_checksum();
     test_connect();
     test_engine();
+    test_os_detect();
     test_packet();
     test_capture_frame();
     test_port_list();
