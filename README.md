@@ -74,6 +74,10 @@ The foundation currently builds under WSL2 Ubuntu with GCC, and its unit checks
 pass with warnings treated as errors. Exact observed versions and commands are
 recorded in [Validation](docs/VALIDATION.md).
 
+Deterministic byte fixtures validate response correlation without root. Separate
+network-namespace smoke tests cover filtered states and recovery after the first
+SYN probe is deliberately dropped.
+
 Raw scans require either root or a narrowly scoped Linux capability:
 
 ```sh

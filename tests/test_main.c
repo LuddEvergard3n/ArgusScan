@@ -8,6 +8,7 @@ int main(void)
     test_connect();
     test_engine();
     test_os_detect();
+    test_response_classifier();
     test_packet();
     test_capture_frame();
     test_port_list();

@@ -40,6 +40,8 @@ This file records observed checks. Planned checks are not presented as passing.
 | Filtered-state firewall lab | passed in isolated namespace | nftables drop rules produced SYN filtered, UDP open\|filtered and TCP Connect filtered without changing the Windows host firewall |
 | TCP Connect host deadline | passed | A focused test delayed the second queued job beyond a 50 ms host deadline and observed ETIMEDOUT without starting a late connection |
 | Versioned OS signature scoring | passed | Synthetic Linux-like and Windows-like fingerprints select their expected signatures; live SYN/ACK evidence reports database version 2026.09 |
+| Response-classifier fixtures | passed | Deterministic TCP, UDP and ICMP bytes cover valid responses, wrong ACK/tuple, closed/filtered states, Window/ACK semantics, duplicates, reordering, fragmentation and truncation without root |
+| First-probe packet loss | passed in isolated namespace | nftables dropped exactly the first SYN; the aggressive-profile retry opened the controlled listener after about 501 ms |
 
 ## Installed Linux packages
 
@@ -91,6 +93,14 @@ namespace. The observed run classified dropped TCP port 18090 as `filtered` for
 both SYN and TCP Connect, and silent UDP port 18091 as `open|filtered`. Exiting the
 namespace discards the rules; the Windows firewall and the WSL root namespace are
 not modified.
+
+## Packet-loss smoke
+
+`scripts/packet-loss-smoke.sh` creates a separate network namespace and installs a
+counter-backed nftables rule that drops alternating matching SYN packets. In the
+recorded single-port run, exactly one 60-byte SYN was dropped. The scanner retried
+after the aggressive profile's 500 ms timeout, received SYN/ACK and classified the
+port open at 501 ms. The namespace and rule disappear when the script exits.
 
 ## Fingerprint scope
 

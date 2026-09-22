@@ -32,6 +32,7 @@ add_library(argus_core STATIC
     src/output/report.c
     src/scan/connect_engine.c
     src/scan/raw_tcp.c
+    src/scan/response_classifier.c
     src/scan/tcp_connect.c
     src/scan/udp.c
 )
@@ -78,6 +79,7 @@ if(ARGUS_BUILD_TESTS)
         tests/test_connect.c
         tests/test_engine.c
         tests/test_os_detect.c
+        tests/test_response_classifier.c
         tests/test_packet.c
         tests/test_service.c
         tests/test_port_list.c

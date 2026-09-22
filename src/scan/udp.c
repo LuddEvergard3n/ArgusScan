@@ -5,6 +5,7 @@
 #include "net/packet_parser.h"
 #include "net/raw_socket.h"
 #include "net/route.h"
+#include "scan/response_classifier.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -47,46 +48,6 @@ static uint32_t random_u32(void)
         return value;
     }
     return (uint32_t)monotonic_ms() ^ (uint32_t)getpid();
-}
-
-static bool icmp_matches_udp(
-    const ArgusIcmpView *icmp,
-    struct in_addr source,
-    struct in_addr target,
-    uint16_t source_port,
-    uint16_t destination_port,
-    ArgusPortState *state
-)
-{
-    const uint8_t *packet = icmp->payload;
-    size_t header_length;
-
-    if (icmp->type != 3U || icmp->payload_length < 28U ||
-        (packet[0] >> 4U) != 4U || packet[9] != 17U) {
-        return false;
-    }
-
-    header_length = (size_t)(packet[0] & 0x0fU) * 4U;
-    if (header_length < 20U || icmp->payload_length < header_length + 4U ||
-        memcmp(&packet[12], &source.s_addr, 4U) != 0 ||
-        memcmp(&packet[16], &target.s_addr, 4U) != 0 ||
-        (uint16_t)(((uint16_t)packet[header_length] << 8U) |
-                   packet[header_length + 1U]) != source_port ||
-        (uint16_t)(((uint16_t)packet[header_length + 2U] << 8U) |
-                   packet[header_length + 3U]) != destination_port) {
-        return false;
-    }
-
-    if (icmp->code == 3U) {
-        *state = ARGUS_PORT_CLOSED;
-        return true;
-    }
-    if (icmp->code == 1U || icmp->code == 2U || icmp->code == 9U ||
-        icmp->code == 10U || icmp->code == 13U) {
-        *state = ARGUS_PORT_FILTERED;
-        return true;
-    }
-    return false;
 }
 
 static bool prepare_udp_probe(
@@ -144,56 +105,41 @@ static bool process_udp_packet(
 )
 {
     ArgusIPv4View ip;
+    ArgusUdpView udp;
+    bool has_udp;
     size_t index;
 
     if (!argus_parse_ipv4(packet, packet_length, &ip)) {
         return false;
     }
+    has_udp = ip.protocol == 17U && argus_parse_udp(&ip, &udp);
+    if (ip.protocol == 17U && !has_udp) {
+        return false;
+    }
 
-    if (ip.protocol == 17U &&
-        memcmp(ip.source, &target.s_addr, 4U) == 0 &&
-        memcmp(ip.destination, &source.s_addr, 4U) == 0) {
-        ArgusUdpView udp;
+    for (index = 0U; index < probe_count; ++index) {
+        PendingUdpProbe *probe = &probes[index];
+        ArgusProbeIdentity identity;
+        ArgusResponseClassification classification;
 
-        if (!argus_parse_udp(&ip, &udp)) {
-            return false;
+        if (!probe->active) {
+            continue;
         }
-        for (index = 0U; index < probe_count; ++index) {
-            PendingUdpProbe *probe = &probes[index];
-
-            if (probe->active && udp.source_port == probe->destination_port &&
-                udp.destination_port == probe->source_port) {
-                probe->result->state = ARGUS_PORT_OPEN;
-                finish_udp_probe(probe, monotonic_ms());
-                --(*active_count);
-                ++(*completed_count);
-                return true;
-            }
+        if (has_udp && (udp.source_port != probe->destination_port ||
+                        udp.destination_port != probe->source_port)) {
+            continue;
         }
-    } else if (ip.protocol == 1U) {
-        ArgusIcmpView icmp;
-
-        if (!argus_parse_icmp(&ip, &icmp)) {
-            return false;
-        }
-        for (index = 0U; index < probe_count; ++index) {
-            PendingUdpProbe *probe = &probes[index];
-            ArgusPortState state;
-
-            if (probe->active && icmp_matches_udp(
-                    &icmp,
-                    source,
-                    target,
-                    probe->source_port,
-                    probe->destination_port,
-                    &state
-                )) {
-                probe->result->state = state;
-                finish_udp_probe(probe, monotonic_ms());
-                --(*active_count);
-                ++(*completed_count);
-                return true;
-            }
+        identity.source = source;
+        identity.target = target;
+        identity.source_port = probe->source_port;
+        identity.destination_port = probe->destination_port;
+        identity.sequence = 0U;
+        if (argus_classify_udp_response(&ip, &identity, &classification)) {
+            probe->result->state = classification.state;
+            finish_udp_probe(probe, monotonic_ms());
+            --(*active_count);
+            ++(*completed_count);
+            return true;
         }
     }
     return false;

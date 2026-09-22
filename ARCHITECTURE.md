@@ -29,6 +29,12 @@ active entries; expired entries are retried or finalized. Timing profiles cap bo
 parallel and outstanding probes, apply inter-probe delay and enforce host timeout.
 TCP and UDP use protocol-specific tables with the same scheduling model.
 
+Response classification is isolated from capture and transmission. The pure
+classifier consumes a parsed IPv4 view plus the probe identity and returns either a
+terminal state or no match. Both live raw schedulers call this module, while unit
+fixtures exercise tuple correlation, sequence acknowledgment, ICMP quotations,
+duplicates, reordering and truncation without raw-socket privileges.
+
 ## Target expansion
 
 The parser accepts one hostname/IPv4 address, IPv4 CIDR, or a range whose final

@@ -5,6 +5,7 @@
 #include "net/packet_parser.h"
 #include "net/raw_socket.h"
 #include "net/route.h"
+#include "scan/response_classifier.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -75,87 +76,6 @@ static ArgusPortState timeout_state(ArgusRawTcpScanType type)
         return ARGUS_PORT_OPEN_FILTERED;
     }
     return ARGUS_PORT_FILTERED;
-}
-
-static bool addresses_match(
-    const ArgusIPv4View *ip,
-    struct in_addr source,
-    struct in_addr target
-)
-{
-    return memcmp(ip->source, &target.s_addr, 4U) == 0 &&
-           memcmp(ip->destination, &source.s_addr, 4U) == 0;
-}
-
-static bool icmp_matches_probe(
-    const ArgusIcmpView *icmp,
-    struct in_addr source,
-    struct in_addr target,
-    uint16_t source_port,
-    uint16_t destination_port
-)
-{
-    const uint8_t *packet = icmp->payload;
-    size_t header_length;
-
-    if (icmp->type != 3U ||
-        !(icmp->code == 1U || icmp->code == 2U || icmp->code == 3U ||
-          icmp->code == 9U || icmp->code == 10U || icmp->code == 13U) ||
-        icmp->payload_length < 28U || (packet[0] >> 4U) != 4U || packet[9] != 6U) {
-        return false;
-    }
-
-    header_length = (size_t)(packet[0] & 0x0fU) * 4U;
-    if (header_length < 20U || icmp->payload_length < header_length + 4U) {
-        return false;
-    }
-
-    return memcmp(&packet[12], &source.s_addr, 4U) == 0 &&
-           memcmp(&packet[16], &target.s_addr, 4U) == 0 &&
-           (uint16_t)(((uint16_t)packet[header_length] << 8U) |
-                      packet[header_length + 1U]) == source_port &&
-           (uint16_t)(((uint16_t)packet[header_length + 2U] << 8U) |
-                      packet[header_length + 3U]) == destination_port;
-}
-
-static bool classify_tcp(
-    ArgusRawTcpScanType type,
-    const ArgusIPv4View *ip,
-    const ArgusTcpView *tcp,
-    uint32_t sequence,
-    ArgusRawTcpResult *result
-)
-{
-    if (type == ARGUS_SCAN_SYN) {
-        if ((tcp->flags & (ARGUS_TCP_SYN | ARGUS_TCP_ACK)) ==
-                (ARGUS_TCP_SYN | ARGUS_TCP_ACK) &&
-            tcp->acknowledgment == sequence + 1U) {
-            result->state = ARGUS_PORT_OPEN;
-            result->has_fingerprint = argus_fingerprint_from_syn_ack(
-                ip,
-                tcp,
-                &result->fingerprint
-            );
-            return true;
-        }
-        if ((tcp->flags & ARGUS_TCP_RST) != 0U) {
-            result->state = ARGUS_PORT_CLOSED;
-            return true;
-        }
-        return false;
-    }
-
-    if ((tcp->flags & ARGUS_TCP_RST) == 0U) {
-        return false;
-    }
-    if (type == ARGUS_SCAN_ACK) {
-        result->state = ARGUS_PORT_UNFILTERED;
-    } else if (type == ARGUS_SCAN_WINDOW) {
-        result->state = tcp->window == 0U ? ARGUS_PORT_CLOSED : ARGUS_PORT_OPEN;
-    } else {
-        result->state = ARGUS_PORT_CLOSED;
-    }
-    return true;
 }
 
 static bool prepare_probe(
@@ -234,52 +154,45 @@ static bool process_captured_packet(
 )
 {
     ArgusIPv4View ip;
+    ArgusTcpView tcp;
+    bool has_tcp;
     size_t index;
 
     if (!argus_parse_ipv4(packet, packet_length, &ip)) {
         return false;
     }
+    has_tcp = ip.protocol == 6U && argus_parse_tcp(&ip, &tcp);
+    if (ip.protocol == 6U && !has_tcp) {
+        return false;
+    }
 
-    if (ip.protocol == 6U && addresses_match(&ip, source, target)) {
-        ArgusTcpView tcp;
+    for (index = 0U; index < probe_count; ++index) {
+        PendingProbe *probe = &probes[index];
+        ArgusProbeIdentity identity;
+        ArgusResponseClassification classification;
 
-        if (!argus_parse_tcp(&ip, &tcp)) {
-            return false;
+        if (!probe->active) {
+            continue;
         }
-        for (index = 0U; index < probe_count; ++index) {
-            PendingProbe *probe = &probes[index];
-
-            if (probe->active && tcp.source_port == probe->destination_port &&
-                tcp.destination_port == probe->source_port &&
-                classify_tcp(type, &ip, &tcp, probe->sequence, probe->result)) {
-                finish_probe(probe, monotonic_ms());
-                --(*active_count);
-                ++(*completed_count);
-                return true;
+        if (has_tcp && (tcp.source_port != probe->destination_port ||
+                        tcp.destination_port != probe->source_port)) {
+            continue;
+        }
+        identity.source = source;
+        identity.target = target;
+        identity.source_port = probe->source_port;
+        identity.destination_port = probe->destination_port;
+        identity.sequence = probe->sequence;
+        if (argus_classify_tcp_response(&ip, &identity, type, &classification)) {
+            probe->result->state = classification.state;
+            probe->result->has_fingerprint = classification.has_fingerprint;
+            if (classification.has_fingerprint) {
+                probe->result->fingerprint = classification.fingerprint;
             }
-        }
-    } else if (ip.protocol == 1U) {
-        ArgusIcmpView icmp;
-
-        if (!argus_parse_icmp(&ip, &icmp)) {
-            return false;
-        }
-        for (index = 0U; index < probe_count; ++index) {
-            PendingProbe *probe = &probes[index];
-
-            if (probe->active && icmp_matches_probe(
-                    &icmp,
-                    source,
-                    target,
-                    probe->source_port,
-                    probe->destination_port
-                )) {
-                probe->result->state = ARGUS_PORT_FILTERED;
-                finish_probe(probe, monotonic_ms());
-                --(*active_count);
-                ++(*completed_count);
-                return true;
-            }
+            finish_probe(probe, monotonic_ms());
+            --(*active_count);
+            ++(*completed_count);
+            return true;
         }
     }
     return false;

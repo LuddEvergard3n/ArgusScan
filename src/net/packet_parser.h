@@ -11,6 +11,8 @@ typedef struct {
     uint8_t ttl;
     uint16_t identification;
     bool dont_fragment;
+    bool more_fragments;
+    uint16_t fragment_offset;
     uint8_t protocol;
     const uint8_t *source;
     const uint8_t *destination;
@@ -69,4 +71,3 @@ bool argus_parse_icmp(const ArgusIPv4View *ip, ArgusIcmpView *view);
 bool argus_parse_tcp_options(const ArgusTcpView *tcp, ArgusTcpOptions *options);
 
 #endif
-

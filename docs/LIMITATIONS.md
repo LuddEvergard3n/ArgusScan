@@ -20,6 +20,8 @@
   probes: SSH, HTTP, Redis, MySQL, FTP and SMTP. TLS negotiation is not implemented.
 - Timing profiles reduce or increase traffic rates but cannot guarantee accuracy,
   non-detection or absence of network impact.
+- Captured IPv4 fragments are ignored. ArgusScan does not reassemble fragmented
+  TCP, UDP or ICMP responses.
 - TCP and UDP raw scans use bounded event-driven probe tables. UDP remains slow by
   protocol design when many services are silent, rate-limit ICMP, or require a
   protocol-specific request before replying.

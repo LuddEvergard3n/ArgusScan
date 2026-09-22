@@ -36,6 +36,8 @@ bool argus_parse_ipv4(const uint8_t *packet, size_t length, ArgusIPv4View *view)
     view->ttl = packet[8];
     view->identification = read_u16(&packet[4]);
     view->dont_fragment = (fragment & 0x4000U) != 0U;
+    view->more_fragments = (fragment & 0x2000U) != 0U;
+    view->fragment_offset = (uint16_t)(fragment & 0x1fffU);
     view->protocol = packet[9];
     view->source = &packet[12];
     view->destination = &packet[16];
@@ -159,4 +161,3 @@ bool argus_parse_tcp_options(const ArgusTcpView *tcp, ArgusTcpOptions *options)
 
     return true;
 }
-
