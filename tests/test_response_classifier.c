@@ -2,6 +2,7 @@
 
 #include "net/packet_builder.h"
 #include "net/packet_parser.h"
+#include "engine/timing.h"
 #include "scan/response_classifier.h"
 
 #include <arpa/inet.h>
@@ -265,9 +266,43 @@ static void test_reordering_duplicates_and_truncation(void)
     ARGUS_CHECK(!argus_parse_ipv4(packet, packet_length, &ip));
 }
 
+static void test_probe_profile_validation(void)
+{
+    ArgusIPv4Target target;
+    ArgusTimingConfig timing;
+    ArgusRawTcpResult result;
+    uint16_t port = 80U;
+    ArgusPortList ports = {&port, 1U};
+    char error[64];
+
+    memset(&target, 0, sizeof(target));
+    ARGUS_CHECK(argus_timing_config(ARGUS_TIMING_NORMAL, &timing));
+    ARGUS_CHECK(!argus_raw_tcp_scan_profile(
+        &target,
+        &ports,
+        &timing,
+        ARGUS_SCAN_SYN,
+        (ArgusTcpProbeProfile)99,
+        &result,
+        error,
+        sizeof(error)
+    ));
+    ARGUS_CHECK(!argus_raw_tcp_scan_profile(
+        &target,
+        &ports,
+        &timing,
+        ARGUS_SCAN_FIN,
+        ARGUS_TCP_PROBE_MINIMAL,
+        &result,
+        error,
+        sizeof(error)
+    ));
+}
+
 void test_response_classifier(void)
 {
     test_tcp_classification();
     test_udp_classification();
     test_reordering_duplicates_and_truncation();
+    test_probe_profile_validation();
 }

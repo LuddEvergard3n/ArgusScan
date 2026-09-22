@@ -72,6 +72,7 @@ bool argus_fingerprint_from_syn_ack(
     fingerprint->window_size = tcp->window;
     fingerprint->dont_fragment = ip->dont_fragment;
     fingerprint->ip_id = ip->identification;
+    fingerprint->tcp_flags = tcp->flags;
     return argus_parse_tcp_options(tcp, &fingerprint->tcp_options);
 }
 
@@ -169,6 +170,140 @@ ArgusOsGuess argus_os_guess(const ArgusFingerprint *fingerprint)
         fingerprint->tcp_options.has_timestamps ? "yes" : "no",
         fingerprint->tcp_options.has_window_scale ? "yes" : "no",
         fingerprint->tcp_options.order_count
+    );
+    return guess;
+}
+
+static const char *ip_id_pattern(const ArgusActiveFingerprint *fingerprint)
+{
+    uint16_t first;
+    uint16_t second;
+    uint16_t third;
+    uint16_t first_delta;
+    uint16_t second_delta;
+
+    if (!fingerprint->has_standard || !fingerprint->has_minimal ||
+        !fingerprint->has_ecn) {
+        return "insufficient";
+    }
+    first = fingerprint->standard.ip_id;
+    second = fingerprint->minimal.ip_id;
+    third = fingerprint->ecn.ip_id;
+    if (first == 0U && second == 0U && third == 0U) {
+        return "zero";
+    }
+    first_delta = (uint16_t)(second - first);
+    second_delta = (uint16_t)(third - second);
+    if (first_delta <= 32U && second_delta <= 32U) {
+        return "incrementing";
+    }
+    return "variable";
+}
+
+static bool consistent_ttl_df(const ArgusActiveFingerprint *fingerprint)
+{
+    const ArgusFingerprint *baseline;
+
+    if (!fingerprint->has_standard) {
+        return false;
+    }
+    baseline = &fingerprint->standard;
+    if (fingerprint->has_minimal &&
+        (fingerprint->minimal.estimated_initial_ttl != baseline->estimated_initial_ttl ||
+         fingerprint->minimal.dont_fragment != baseline->dont_fragment)) {
+        return false;
+    }
+    if (fingerprint->has_ecn &&
+        (fingerprint->ecn.estimated_initial_ttl != baseline->estimated_initial_ttl ||
+         fingerprint->ecn.dont_fragment != baseline->dont_fragment)) {
+        return false;
+    }
+    return true;
+}
+
+static const char *timestamp_pattern(const ArgusActiveFingerprint *fingerprint)
+{
+    if (!fingerprint->has_standard || !fingerprint->has_ecn ||
+        !fingerprint->standard.tcp_options.has_timestamps ||
+        !fingerprint->ecn.tcp_options.has_timestamps) {
+        return "not-observed";
+    }
+    return fingerprint->ecn.tcp_options.timestamp_value >=
+        fingerprint->standard.tcp_options.timestamp_value
+        ? "nondecreasing"
+        : "nonmonotonic";
+}
+
+ArgusOsGuess argus_os_guess_active(const ArgusActiveFingerprint *fingerprint)
+{
+    ArgusOsGuess guess;
+    size_t best_index = 0U;
+    size_t index;
+    size_t scored_probes = 0U;
+    size_t observed_probes = 0U;
+    double best_score = 0.0;
+    bool ttl_df_consistent;
+    bool ecn_echo = false;
+
+    guess.name = "unknown TCP/IP stack";
+    guess.signature_db_version = ARGUS_OS_SIGNATURE_DB_VERSION;
+    guess.confidence = 0.0;
+    guess.evidence[0] = '\0';
+    if (fingerprint == NULL || !fingerprint->has_standard) {
+        return guess;
+    }
+
+    observed_probes = 1U + (fingerprint->has_minimal ? 1U : 0U) +
+        (fingerprint->has_ecn ? 1U : 0U) +
+        (fingerprint->closed_port_probed ? 1U : 0U);
+    for (index = 0U; index < sizeof(OS_SIGNATURES) / sizeof(OS_SIGNATURES[0]); ++index) {
+        double score = signature_score(&OS_SIGNATURES[index], &fingerprint->standard);
+        size_t count = 1U;
+
+        if (fingerprint->has_ecn) {
+            score += signature_score(&OS_SIGNATURES[index], &fingerprint->ecn);
+            ++count;
+        }
+        score /= (double)count;
+        if (score > best_score) {
+            best_score = score;
+            best_index = index;
+        }
+        scored_probes = count;
+    }
+
+    ttl_df_consistent = consistent_ttl_df(fingerprint);
+    if (fingerprint->has_ecn) {
+        ecn_echo = (fingerprint->ecn.tcp_flags & ARGUS_TCP_ECE) != 0U;
+    }
+
+    if (best_score >= 0.30) {
+        guess.name = OS_SIGNATURES[best_index].name;
+        guess.confidence = best_score;
+        if (scored_probes >= 2U && ttl_df_consistent) {
+            guess.confidence += 0.05;
+        }
+        if (fingerprint->closed_port_probed && fingerprint->closed_port_rst) {
+            guess.confidence += 0.02;
+        }
+        if (guess.confidence > 0.92) {
+            guess.confidence = 0.92;
+        }
+    }
+
+    (void)snprintf(
+        guess.evidence,
+        sizeof(guess.evidence),
+        "db=%s,probe_results=%zu,ttl_df_consistent=%s,ipid=%s,timestamps=%s,ecn_ece=%s,closed_rst=%s",
+        ARGUS_OS_SIGNATURE_DB_VERSION,
+        observed_probes,
+        ttl_df_consistent ? "true" : "false",
+        ip_id_pattern(fingerprint),
+        timestamp_pattern(fingerprint),
+        ecn_echo ? "true" : "false",
+        fingerprint->closed_port_probed
+            ? (fingerprint->closed_port_rst ? "true" : "false")
+            : "not-probed"
     );
     return guess;
 }

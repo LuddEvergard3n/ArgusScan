@@ -91,12 +91,17 @@ Fingerprinting will retain observations rather than only a guessed label:
 Signatures produce explainable weighted scores. A result is probabilistic and may
 be altered by routing, NAT, firewalls, proxies or kernel configuration.
 
-The current implementation extracts evidence from the SYN/ACK and scores broad
+The default SYN scan extracts evidence from each SYN/ACK and scores broad
 `Linux-like`, `Windows-like` or `BSD/macOS-like` signatures from a compiled,
-versioned table. The table compares TTL, window, DF, feature presence and exact TCP
-option order. The signature-table version is emitted with text, JSON and XML.
-Multi-probe active OS signatures remain pending, so confidence is capped and no
-narrow kernel or OS version is claimed.
+versioned table. With explicit `--os-detect`, the first open port is observed with
+standard, minimal-option and ECN SYN profiles. A closed port from the same input,
+when available, contributes reset behavior. The aggregate records TTL/DF
+consistency, IP ID pattern, timestamp behavior, ECN echo and the closed-port result.
+
+The signature-table version and probe mode are emitted with text, JSON and XML.
+Confidence remains capped, and no narrow kernel or OS version is claimed. This is
+an intentionally small evidence set rather than a compatibility claim with mature
+fingerprint databases.
 
 ## Service detection
 

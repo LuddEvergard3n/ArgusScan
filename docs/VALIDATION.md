@@ -42,6 +42,8 @@ This file records observed checks. Planned checks are not presented as passing.
 | Versioned OS signature scoring | passed | Synthetic Linux-like and Windows-like fingerprints select their expected signatures; live SYN/ACK evidence reports database version 2026.09 |
 | Response-classifier fixtures | passed | Deterministic TCP, UDP and ICMP bytes cover valid responses, wrong ACK/tuple, closed/filtered states, Window/ACK semantics, duplicates, reordering, fragmentation and truncation without root |
 | First-probe packet loss | passed in isolated namespace | nftables dropped exactly the first SYN; the aggressive-profile retry opened the controlled listener after about 501 ms |
+| Active OS multiprobe | passed in loopback lab | Standard, minimal-option and ECN profiles returned evidence from a controlled listener; a controlled closed port returned RST; aggregate reported four observations |
+| Multiprobe structured output | passed | PowerShell parsed JSON and XML and verified `active-multiprobe` as the probe mode |
 
 ## Installed Linux packages
 
@@ -109,3 +111,9 @@ The emitted evidence included the observed and estimated TTL, window, DF, TCP
 feature flags, option count and signature database version `2026.09`. This is a
 controlled consistency check, not evidence that the current single-probe model can
 reliably identify a remote OS or kernel version.
+
+The opt-in multiprobe run used open port 18080 and closed port 18081. All three
+open-port profiles returned SYN/ACK, ECN was echoed, the closed port returned RST,
+and the aggregate remained the broad Linux-like family. Loopback produced zero IP
+IDs and did not provide a monotonic timestamp comparison in that run. These are
+observations from the controlled WSL kernel, not a general accuracy benchmark.

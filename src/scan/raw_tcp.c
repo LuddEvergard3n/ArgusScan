@@ -84,6 +84,7 @@ static bool prepare_probe(
     uint16_t source_port,
     uint16_t destination_port,
     ArgusRawTcpScanType type,
+    ArgusTcpProbeProfile profile,
     ArgusRawTcpResult *result,
     PendingProbe *probe
 )
@@ -116,11 +117,14 @@ static bool prepare_probe(
         ? random_u32()
         : 0U;
     spec.flags = flags_for_scan(type);
+    if (type == ARGUS_SCAN_SYN && profile == ARGUS_TCP_PROBE_ECN) {
+        spec.flags |= ARGUS_TCP_ECE | ARGUS_TCP_CWR;
+    }
     spec.window = 64240U;
     spec.ttl = 64U;
     spec.ip_id = (uint16_t)random_u32();
     spec.dont_fragment = true;
-    if (type == ARGUS_SCAN_SYN) {
+    if (type == ARGUS_SCAN_SYN && profile != ARGUS_TCP_PROBE_MINIMAL) {
         spec.options = syn_options;
         spec.options_length = sizeof(syn_options);
     }
@@ -225,11 +229,12 @@ bool argus_raw_tcp_scan_parse(const char *text, ArgusRawTcpScanType *type)
     return false;
 }
 
-bool argus_raw_tcp_scan(
+bool argus_raw_tcp_scan_profile(
     const ArgusIPv4Target *target,
     const ArgusPortList *ports,
     const ArgusTimingConfig *timing,
     ArgusRawTcpScanType type,
+    ArgusTcpProbeProfile profile,
     ArgusRawTcpResult *results,
     char *error,
     size_t error_capacity
@@ -250,7 +255,9 @@ bool argus_raw_tcp_scan(
 
     if (target == NULL || ports == NULL || timing == NULL || results == NULL ||
         error == NULL || error_capacity == 0U || ports->count == 0U ||
-        type < ARGUS_SCAN_SYN || type > ARGUS_SCAN_WINDOW) {
+        type < ARGUS_SCAN_SYN || type > ARGUS_SCAN_WINDOW ||
+        profile < ARGUS_TCP_PROBE_STANDARD || profile > ARGUS_TCP_PROBE_ECN ||
+        (type != ARGUS_SCAN_SYN && profile != ARGUS_TCP_PROBE_STANDARD)) {
         return false;
     }
     error[0] = '\0';
@@ -286,6 +293,7 @@ bool argus_raw_tcp_scan(
                 source_port,
                 ports->ports[index],
                 type,
+                profile,
                 &results[index],
                 &probes[index]
             )) {
@@ -439,4 +447,26 @@ bool argus_raw_tcp_scan(
     argus_raw_socket_close(&raw);
     argus_packet_capture_close(&capture);
     return true;
+}
+
+bool argus_raw_tcp_scan(
+    const ArgusIPv4Target *target,
+    const ArgusPortList *ports,
+    const ArgusTimingConfig *timing,
+    ArgusRawTcpScanType type,
+    ArgusRawTcpResult *results,
+    char *error,
+    size_t error_capacity
+)
+{
+    return argus_raw_tcp_scan_profile(
+        target,
+        ports,
+        timing,
+        type,
+        ARGUS_TCP_PROBE_STANDARD,
+        results,
+        error,
+        error_capacity
+    );
 }

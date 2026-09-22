@@ -20,6 +20,12 @@ typedef enum {
     ARGUS_SCAN_WINDOW = 5
 } ArgusRawTcpScanType;
 
+typedef enum {
+    ARGUS_TCP_PROBE_STANDARD = 0,
+    ARGUS_TCP_PROBE_MINIMAL = 1,
+    ARGUS_TCP_PROBE_ECN = 2
+} ArgusTcpProbeProfile;
+
 typedef struct {
     uint16_t port;
     ArgusPortState state;
@@ -41,5 +47,15 @@ bool argus_raw_tcp_scan(
     size_t error_capacity
 );
 
-#endif
+bool argus_raw_tcp_scan_profile(
+    const ArgusIPv4Target *target,
+    const ArgusPortList *ports,
+    const ArgusTimingConfig *timing,
+    ArgusRawTcpScanType type,
+    ArgusTcpProbeProfile profile,
+    ArgusRawTcpResult *results,
+    char *error,
+    size_t error_capacity
+);
 
+#endif

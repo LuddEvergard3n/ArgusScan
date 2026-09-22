@@ -54,6 +54,7 @@ ctest --test-dir build --output-on-failure
   --scan syn \
   --ports 22,80,443,8000-8010 \
   --timing normal \
+  --os-detect \
   --services \
   --output json \
   127.0.0.1
@@ -85,6 +86,12 @@ sudo setcap cap_net_raw+ep ./build/argusscan
 ```
 
 TCP Connect does not require raw-socket privileges.
+
+`--os-detect` is available only with `--scan syn`. It uses the first open TCP
+port from the supplied list for two additional bounded observations (minimal SYN
+and ECN SYN). If the same list contains a closed port, one additional SYN records
+its reset behavior. The resulting family guess remains probabilistic and does not
+claim a specific OS or kernel version.
 
 The executable built on a Windows-mounted WSL path may not retain Linux file
 capabilities. For `setcap`, build or copy it to a Linux filesystem first. The

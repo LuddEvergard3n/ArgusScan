@@ -98,6 +98,17 @@ static void output_text(const ArgusScanReport *report)
         report->port_count,
         (long long)report->duration_ms
     );
+    if (report->has_active_fingerprint) {
+        ArgusOsGuess guess = argus_os_guess_active(&report->active_fingerprint);
+
+        printf(
+            "OS multiprobe guess: %s (confidence %.2f, signature db %s)\n",
+            guess.name,
+            guess.confidence,
+            guess.signature_db_version
+        );
+        printf("Active evidence: %s\n", guess.evidence);
+    }
     puts("PORT      PROTOCOL STATE          LATENCY");
     for (index = 0U; index < report->port_count; ++index) {
         const ArgusReportPort *port = &report->ports[index];
@@ -109,7 +120,7 @@ static void output_text(const ArgusScanReport *report)
             argus_port_state_name(port->state),
             port->latency_ms
         );
-        if (port->has_fingerprint) {
+        if (port->has_fingerprint && !report->has_active_fingerprint) {
             ArgusOsGuess guess = argus_os_guess(&port->fingerprint);
             printf(
                 "  OS guess: %s (confidence %.2f, signature db %s)\n",
@@ -152,7 +163,17 @@ static void output_json(const ArgusScanReport *report)
     print_json_string(report->started_at);
     printf(",\n  \"duration_ms\": %lld,\n", (long long)report->duration_ms);
 
-    if (fingerprint == NULL) {
+    if (report->has_active_fingerprint) {
+        ArgusOsGuess guess = argus_os_guess_active(&report->active_fingerprint);
+
+        fputs("  \"os_guess\": {\"name\": ", stdout);
+        print_json_string(guess.name);
+        printf(", \"confidence\": %.2f, \"signature_db_version\": ", guess.confidence);
+        print_json_string(guess.signature_db_version);
+        fputs(", \"probe_mode\": \"active-multiprobe\", \"evidence\": [", stdout);
+        print_json_string(guess.evidence);
+        fputs("]},\n", stdout);
+    } else if (fingerprint == NULL) {
         fputs("  \"os_guess\": null,\n", stdout);
     } else {
         ArgusOsGuess guess = argus_os_guess(fingerprint);
@@ -208,12 +229,17 @@ static void output_xml(const ArgusScanReport *report)
     print_xml_text(report->started_at);
     printf("\" duration-ms=\"%lld\" />\n", (long long)report->duration_ms);
 
-    if (fingerprint != NULL) {
-        ArgusOsGuess guess = argus_os_guess(fingerprint);
+    if (report->has_active_fingerprint || fingerprint != NULL) {
+        ArgusOsGuess guess = report->has_active_fingerprint
+            ? argus_os_guess_active(&report->active_fingerprint)
+            : argus_os_guess(fingerprint);
         fputs("  <os-guess name=\"", stdout);
         print_xml_text(guess.name);
         printf("\" confidence=\"%.2f\" signature-db-version=\"", guess.confidence);
         print_xml_text(guess.signature_db_version);
+        if (report->has_active_fingerprint) {
+            fputs("\" probe-mode=\"active-multiprobe", stdout);
+        }
         fputs("\"><evidence>", stdout);
         print_xml_text(guess.evidence);
         fputs("</evidence></os-guess>\n", stdout);

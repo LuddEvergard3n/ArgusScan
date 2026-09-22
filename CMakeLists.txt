@@ -31,6 +31,7 @@ add_library(argus_core STATIC
     src/net/target_resolver.c
     src/output/report.c
     src/scan/connect_engine.c
+    src/scan/os_probe.c
     src/scan/raw_tcp.c
     src/scan/response_classifier.c
     src/scan/tcp_connect.c

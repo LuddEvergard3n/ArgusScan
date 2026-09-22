@@ -16,6 +16,10 @@ patterns across destinations, ports and time even when probes are delayed.
 Timing templates exist for traffic control, repeatability and reducing load on
 sensitive networks. They do not promise invisibility or IDS evasion.
 
+Active OS detection is opt-in because it adds two probes to the selected open port
+and, when available, one probe to a closed port. It is intended for a controlled,
+authorized lab and does not attempt to conceal those observations.
+
 ## Hostile response model
 
 The target or network may return truncated, malformed, duplicated, delayed,
@@ -33,4 +37,3 @@ Raw socket access raises the impact of memory-safety defects. Parsing, service
 detection and formatting should not retain elevated privileges unnecessarily.
 Output paths must not overwrite unrelated files, and interrupted scans must release
 sockets, capture handles, jobs and buffers.
-

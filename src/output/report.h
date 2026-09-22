@@ -33,6 +33,8 @@ typedef struct {
     const char *timing;
     const char *started_at;
     int64_t duration_ms;
+    bool has_active_fingerprint;
+    ArgusActiveFingerprint active_fingerprint;
     const ArgusReportPort *ports;
     size_t port_count;
 } ArgusScanReport;
@@ -41,4 +43,3 @@ bool argus_output_format_parse(const char *text, ArgusOutputFormat *format);
 void argus_output_report(const ArgusScanReport *report, ArgusOutputFormat format);
 
 #endif
-

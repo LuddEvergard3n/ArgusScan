@@ -27,7 +27,8 @@
   protocol-specific request before replying.
 - CIDR and last-octet ranges are capped at 4,096 targets and currently support text
   output only. CIDR expansion includes network and broadcast addresses.
-- Current OS scoring uses one SYN/ACK and a small versioned signature table.
-  Multiple active probes and a substantially larger fixture corpus are required
-  before making narrower OS/version guesses.
+- Default OS scoring uses one SYN/ACK. Optional `--os-detect` adds standard,
+  minimal-option and ECN observations plus closed-port reset behavior when the
+  input contains a closed port. The signature table and fixture corpus remain too
+  small for narrow OS or version claims.
 - There is no CVE database, exploit engine, GUI, distributed scanner or Nmap backend.

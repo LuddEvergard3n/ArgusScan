@@ -67,6 +67,17 @@ for scan_type in syn fin null xmas ack window; do
     127.0.0.1
 done
 
+echo "== active OS multiprobe =="
+active_output=$("${project_dir}/build/argusscan" \
+  --scan syn \
+  --os-detect \
+  --ports "${listener_port},${closed_port}" \
+  --timing aggressive \
+  127.0.0.1)
+printf '%s\n' "${active_output}"
+grep -Fq 'OS multiprobe guess:' <<<"${active_output}"
+grep -Eq 'probe_results=[34]' <<<"${active_output}"
+
 echo "== service detection =="
 "${project_dir}/build/argusscan" \
   --scan tcp-connect \

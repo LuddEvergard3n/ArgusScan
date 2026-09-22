@@ -15,8 +15,20 @@ typedef struct {
     uint16_t window_size;
     bool dont_fragment;
     uint16_t ip_id;
+    uint8_t tcp_flags;
     ArgusTcpOptions tcp_options;
 } ArgusFingerprint;
+
+typedef struct {
+    bool has_standard;
+    ArgusFingerprint standard;
+    bool has_minimal;
+    ArgusFingerprint minimal;
+    bool has_ecn;
+    ArgusFingerprint ecn;
+    bool closed_port_probed;
+    bool closed_port_rst;
+} ArgusActiveFingerprint;
 
 typedef struct {
     const char *name;
@@ -32,5 +44,6 @@ bool argus_fingerprint_from_syn_ack(
 );
 
 ArgusOsGuess argus_os_guess(const ArgusFingerprint *fingerprint);
+ArgusOsGuess argus_os_guess_active(const ArgusActiveFingerprint *fingerprint);
 
 #endif

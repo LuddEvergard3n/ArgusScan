@@ -6,6 +6,7 @@
 #include "net/target_resolver.h"
 #include "output/report.h"
 #include "scan/connect_engine.h"
+#include "scan/os_probe.h"
 #include "scan/raw_tcp.h"
 #include "scan/udp.h"
 
@@ -25,7 +26,7 @@ static void print_help(const char *program)
         "  %s --help\n"
         "  %s --version\n"
         "  %s --check-raw\n"
-        "  %s --scan TYPE --ports PORTS [--timing PROFILE] [--services] [--output FORMAT] TARGET\n"
+        "  %s --scan TYPE --ports PORTS [--timing PROFILE] [--services] [--os-detect] [--output FORMAT] TARGET\n"
         "\n"
         "Examples:\n"
         "  %s --scan tcp-connect --ports 22,80,443 --timing normal 127.0.0.1\n"
@@ -123,6 +124,8 @@ static int run_connect_scan(
     int64_t started_ms;
     size_t index;
 
+    memset(&report, 0, sizeof(report));
+
     if (!argus_port_list_parse(port_text, &ports)) {
         fprintf(stderr, "error: invalid port list '%s'\n", port_text);
         return 2;
@@ -195,6 +198,7 @@ static int run_raw_scan(
     ArgusTimingTemplate timing_template,
     ArgusRawTcpScanType scan_type,
     bool detect_services,
+    bool detect_os,
     ArgusOutputFormat output_format
 )
 {
@@ -207,7 +211,11 @@ static int run_raw_scan(
     char started_at[32];
     char error[256];
     int64_t started_ms;
+    ArgusActiveFingerprint active_fingerprint;
+    bool has_active_fingerprint = false;
     size_t index;
+
+    memset(&report, 0, sizeof(report));
 
     if (check_raw_access(program, false) != 0) {
         return 1;
@@ -254,6 +262,51 @@ static int run_raw_scan(
         return 1;
     }
 
+    if (detect_os) {
+        const ArgusFingerprint *standard = NULL;
+        uint16_t open_port = 0U;
+        uint16_t closed_port = 0U;
+
+        for (index = 0U; index < ports.count; ++index) {
+            if (standard == NULL && results[index].state == ARGUS_PORT_OPEN &&
+                results[index].has_fingerprint) {
+                standard = &results[index].fingerprint;
+                open_port = results[index].port;
+            }
+            if (closed_port == 0U && results[index].state == ARGUS_PORT_CLOSED) {
+                closed_port = results[index].port;
+            }
+        }
+        if (standard == NULL) {
+            fprintf(
+                stderr,
+                "warning: --os-detect needs an open TCP port; no multiprobe result produced\n"
+            );
+        } else if (!argus_active_os_probe(
+                &target,
+                &timing,
+                open_port,
+                standard,
+                closed_port != 0U,
+                closed_port,
+                &active_fingerprint,
+                error,
+                sizeof(error)
+            )) {
+            fprintf(
+                stderr,
+                "error: %s\n",
+                error[0] == '\0' ? "active OS detection failed" : error
+            );
+            free(report_ports);
+            free(results);
+            argus_port_list_destroy(&ports);
+            return 1;
+        } else {
+            has_active_fingerprint = true;
+        }
+    }
+
     for (index = 0U; index < ports.count; ++index) {
         report_ports[index].port = results[index].port;
         report_ports[index].protocol = "tcp";
@@ -278,6 +331,10 @@ static int run_raw_scan(
     report.timing = argus_timing_name(timing_template);
     report.started_at = started_at;
     report.duration_ms = monotonic_ms() - started_ms;
+    report.has_active_fingerprint = has_active_fingerprint;
+    if (has_active_fingerprint) {
+        report.active_fingerprint = active_fingerprint;
+    }
     report.ports = report_ports;
     report.port_count = ports.count;
     argus_output_report(&report, output_format);
@@ -306,6 +363,8 @@ static int run_udp_scan(
     char error[256];
     int64_t started_ms;
     size_t index;
+
+    memset(&report, 0, sizeof(report));
 
     if (check_raw_access(program, false) != 0) {
         return 1;
@@ -375,6 +434,7 @@ int main(int argc, char **argv)
     ArgusTimingTemplate timing = ARGUS_TIMING_NORMAL;
     ArgusOutputFormat output_format = ARGUS_OUTPUT_TEXT;
     bool detect_services = false;
+    bool detect_os = false;
     ArgusRawTcpScanType raw_type = ARGUS_SCAN_SYN;
     bool is_raw_tcp = false;
     ArgusTargetList targets;
@@ -409,6 +469,8 @@ int main(int argc, char **argv)
             }
         } else if (strcmp(argv[index], "--services") == 0) {
             detect_services = true;
+        } else if (strcmp(argv[index], "--os-detect") == 0) {
+            detect_os = true;
         } else if (strcmp(argv[index], "--output") == 0 && index + 1 < argc) {
             if (!argus_output_format_parse(argv[++index], &output_format)) {
                 fprintf(stderr, "error: unknown output format '%s'\n", argv[index]);
@@ -436,6 +498,10 @@ int main(int argc, char **argv)
             fprintf(stderr, "error: scan type '%s' is not implemented yet\n", scan_type);
             return 2;
         }
+    }
+    if (detect_os && (!is_raw_tcp || raw_type != ARGUS_SCAN_SYN)) {
+        fprintf(stderr, "error: --os-detect requires --scan syn\n");
+        return 2;
     }
 
     if (!argus_target_list_parse(
@@ -482,6 +548,7 @@ int main(int argc, char **argv)
                 timing,
                 raw_type,
                 detect_services,
+                detect_os,
                 output_format
             );
         }
